@@ -1,8 +1,10 @@
+require('dotenv').config();
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
+const Persons = require('./models/persons');
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT;
 
 app.use(cors());
 app.use(express.static('build'));
@@ -15,96 +17,110 @@ morgan.token('postBody', req => {
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :postBody'));
 // app.use(morgan('tiny'));
 
-
-let persons = [
-    { 
-      "id": 1,
-      "name": "Arto Hellas", 
-      "number": "040-123456"
-    },
-    { 
-      "id": 2,
-      "name": "Ada Lovelace", 
-      "number": "39-44-5323523"
-    },
-    { 
-      "id": 3,
-      "name": "Dan Abramov", 
-      "number": "12-43-234345"
-    },
-    { 
-      "id": 4,
-      "name": "Mary Poppendieck", 
-      "number": "39-23-6423122"
-    }
-];
-
 app.get('/api/persons', (request, response) => {
-    response.json(persons);
+    Persons.find({}).then(people => {
+        response.json(people);
+    })
 });
 
-app.get('/api/persons/:id', (request, response) => {
-    const personId = Number(request.params.id);
-    const person = persons.find(person => person.id == personId);
-
-    if (person)
+const errorHandler = (error, request, response, next) => {
+    console.error(error);
+  
+    if (error.name === 'CastError')
     {
-        response.json(person);
+        return response.status(400).send({ error: 'malformatted id' });
     }
-    else
+    else if (error.name === 'ValidationError') 
     {
-        response.status(404).end();
+        return response.status(400).json({ error: error.message })
     }
+    else if (error.code === 11000)
+    {
+        return response.status(400).json({ error: error.message });
+    }
+    else if (error.name === 'NoBody')
+    {
+        return response.status(400).send({ error: error.error });
+    }
+    else if (error.name === 'NotFound')
+    {
+        return response.status(400).send({ error: error.error });
+    }
+  
+    next(error);
+}
+
+app.get('/api/persons/:id', (request, response, next) => {
+    const personId = request.params.id;
+    Persons.findById(personId).then(person => {
+        if (person)
+        {
+            response.json(person);
+        }
+        else 
+        {
+            next({ name: 'NotFound', error: 'person not found in phonebook!' });
+            return;
+        }
+    })
+    .catch(error => next(error));
 });
 
-app.delete('/api/persons/:id', (request, response) => {
-    const personId = Number(request.params.id);
-    persons = persons.filter(person => person.id !== personId);
-
-    response.status(204).end();
+app.delete('/api/persons/:id', (request, response, next) => {
+    const personId = request.params.id;
+    Persons.findByIdAndDelete(personId).then(value => {
+        response.status(204).end();
+    })
+    .catch(error => next(error));
 });
 
-app.post('/api/persons', (request, response) => {
-    function randomIntFromInterval(min, max) { // min and max included 
-        return Math.floor(Math.random() * (max - min + 1) + min)
-    }
-
-    console.log(request.body);
+app.put('/api/persons/:id', (request, response, next) => 
+{
     if (!request.body)
     {
-        return response.status(400).json({ error: 'provide a JSON body with the post request!' });
+        next({ name: 'NoBody', error: 'provide a JSON body with the post request!' });
+        return;
     }
+    const personId = request.params.id;
 
-    if (!request.body.name)
+    const newPerson = {};
+    if (request.body.name) newPerson.name = request.body.name;
+    if (request.body.number) newPerson.number = request.body.number;
+
+    Persons.findByIdAndUpdate(personId, newPerson, { new: true, runValidators: true })
+        .then(updatedPerson => {
+            response.json(updatedPerson);
+        })
+        .catch(error => next(error));
+});
+
+app.post('/api/persons', (request, response, next) => 
+{
+    if (!request.body)
     {
-        return response.status(400).json({ error: 'provide a name field in the JSON body!' });
-    }
-    
-    if (!request.body.number)
-    {
-        return response.status(400).json({ error: 'provide a number field in the JSON body!' });
+        next({ name: 'NoBody', error: 'provide a JSON body with the post request!' });
+        return;
     }
 
-    if (persons.find(person => person.name === request.body.name) !== undefined)
-    {
-        return response.status(400).json({ error: 'person with given name already exists!' });
-    }
+    const person = new Persons({
+        time: new Date()
+    });
 
-    const person = {
-        id: randomIntFromInterval(0, 10000000),
-        time: new Date(),
-        name: request.body.name,
-        number: request.body.number
-    }
+    if (request.body.name) person.name = request.body.name;
+    if (request.body.number) person.number = request.body.number;
 
-    persons = persons.concat(person);
-    response.json(person);
+    person.save().then(savedPerson => {
+        response.json(savedPerson);
+    })
+    .catch(error => next(error));
 });
 
 app.get('/info', (request, response) => {
-    response.send(`<p>Phonebook has info for ${persons.length} ${persons.length <= 1 ? 'person' : 'people'}.</p>
+    response.send(`<p>Phonebook has info for ${Persons.length} ${Persons.length <= 1 ? 'person' : 'people'}.</p>
     <p>${new Date()}</p>`);
 });
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}.`);
