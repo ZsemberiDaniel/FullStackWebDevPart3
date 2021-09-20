@@ -1,7 +1,6 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
 
-if (process.argv.length < 3) 
-{
+if (process.argv.length < 3) {
     console.log('Please provide the password as an argument to list all people: node mongo.js <password>');
     process.exit(1);
 }
@@ -15,49 +14,43 @@ const phonebookSchema = new mongoose.Schema({
     // id: Number,
     name: {
         type: String,
-        required: true
+        required: true,
     },
     number: {
         type: String,
-        required: true
+        required: true,
     },
     date: {
         type: Date,
-        required: true
-    }
+        required: true,
+    },
 });
 
 const Person = mongoose.model('Person', phonebookSchema);
 
 // display all entries
-if (process.argv.length === 3)
-{
-    Person.find({ }).then(result => {
-        console.log("List of people in database:");
-        console.log("________________")
-        result.forEach(person => {
+if (process.argv.length === 3) {
+    Person.find({ }).then((result) => {
+        console.log('List of people in database:');
+        console.log('________________');
+        result.forEach((person) => {
             console.log(`${person.name}\t ${person.number}`);
         });
-        console.log("________________")
+        console.log('________________');
         mongoose.connection.close();
-    })
-}
-// add person
-else if (process.argv.length === 5)
-{
+    });
+} else if (process.argv.length === 5) { // add person
     const person = new Person({
         name: process.argv[3],
         number: process.argv[4],
-        date: new Date()
-    })
+        date: new Date(),
+    });
 
-    person.save().then(result => {
+    person.save().then(() => {
         console.log('Person saved!');
         mongoose.connection.close();
-    })
-}
-else
-{
+    });
+} else {
     console.log('Please provide the password as an argument to list all people: node mongo.js <password>');
     console.log('OR Please provide the password, name and phone number as an argument to add new person: node mongo.js <password> "<name>" <phone-number>');
     process.exit(1);
